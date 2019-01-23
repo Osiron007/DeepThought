@@ -24,11 +24,8 @@ class param_handler(object):
         self.BUFFER_PATH = "NOT PATH DEFINED"
         self.BATCH_SIZE = 128
         self.MAX_ITERATIONS = 100000000
-        self.STATE_SIZE = 53
+        self.STATE_SIZE = 5
         self.ACTION_SIZE = 2
-        self.SPLIT_STATE_SPACE = True
-        self.STATE_SIZE_ENV = 48
-        self.STATE_SIZE_KIN = 5
 
         # learning
         self.GAMMA = 0.99
@@ -42,6 +39,7 @@ class param_handler(object):
         self.backup_path = "NOT PATH DEFINED"
         self.backup_interval = 500
         self.backup_interval_evaluation = 50000
+        self.next_backup_id = 99999
 
         # logging
         self.log_path = "NOT PATH DEFINED"
@@ -62,7 +60,6 @@ class param_handler(object):
         self.MAX_ITERATIONS = self.config.getint("hyperparameter", "maxiterations")
         self.STATE_SIZE = self.config.getint("hyperparameter", "state_dim")
         self.ACTION_SIZE = self.config.getint("hyperparameter", "action_dim")
-        self.SPLIT_STATE_SPACE = self.config.getboolean("hyperparameter", "split_state_space")
 
         # learning
         self.GAMMA = self.config.getfloat("learning", "gamma")
@@ -76,6 +73,7 @@ class param_handler(object):
         self.backup_path = self.config.get("backup", "backup_path")
         self.backup_interval = self.config.getint("backup", "backup_interval")
         self.backup_interval_evaluation = self.config.getint("backup", "backup_interval_evaluation")
+        self.next_backup_id = self.config.getint("backup", "next_backup_id")
 
         # logging
         self.log_path = self.config.get("logging", "log_path")
@@ -94,7 +92,6 @@ class param_handler(object):
         print("Max Iterations: " + str(self.MAX_ITERATIONS))
         print("State dimension: " + str(self.STATE_SIZE))
         print("Action dimension: " + str(self.ACTION_SIZE))
-        print("Split State Space: " + str(self.SPLIT_STATE_SPACE))
 
         # learning
         print("#################Learning########################")

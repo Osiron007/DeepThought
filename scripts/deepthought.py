@@ -24,21 +24,18 @@ from parameter_handler import parameter_handler as PH
 
 #ReplayBuffer SQLite
 #from ReplayBuffer_SQLite import ReplayBufferSQLite as ReplayBuffer
-from ReplayBuffer_SQLite_SSv1 import ReplayBufferSQLiteSSv1 as ReplayBuffer
+from scripts.replay_buffer.ReplayBuffer_SQLiteV1 import ReplayBufferSQLite as ReplayBuffer
 
 from model.modelV2.ActorNetwork import ActorNetwork
 from model.modelV2.CriticNetwork import CriticNetwork
 
-#from model.modelV4.ActorNetwork import ActorNetwork
-#from model.modelV4.CriticNetwork import CriticNetwork
+MODEL_PATH="model/modelV2"
 
-#MODEL_PATH="model/modelV2"
-
-CONFIG_FILE = '/home/'
+CONFIG_FILE = "configuration1.cfg"
 
 
 def ros_add_to_replaybuffer(Transition_from_ros):
-    print("adding")
+    print("adding Data to ReplayBuffer")
 
     ##########################################
     #          parameter_handler             #
@@ -100,52 +97,6 @@ def ros_add_to_replaybuffer(Transition_from_ros):
     print("Transitions in Buffer: " + str(Buffer.count()))
 
 
-
-def ros_predict(req):
-    print("predict")
-
-    ##########################################
-    #          parameter_handler             #
-    ##########################################
-    global params
-
-    ##########################################
-    #            Actor-Network               #
-    ##########################################
-    global actor
-
-    #req.statespace_size
-    #req.statespace
-    current_s_t = np.asarray(req.statespace, dtype='float32')
-
-    if params.SPLIT_STATE_SPACE:
-        #print("Splitting")
-        # split states into env and kin input for split network architecture
-        states_env = np.asarray([current_s_t[0:48]])
-        states_kin = np.asarray([current_s_t[48:54]])
-        current_s_t = [states_kin, states_env]
-        #print(current_s_t)
-    #print(current_s_t.shape)
-
-    #global graph is needed: https://github.com/fchollet/keras/issues/2397
-    global graph
-    with graph.as_default():
-        if params.SPLIT_STATE_SPACE:
-            a_t_original = actor.model.predict(current_s_t)
-        else:
-            a_t_original = actor.model.predict(current_s_t.reshape(1, current_s_t.shape[0]))
-
-    res = PredictResponse()
-
-    res.actions.append(a_t_original[0][0])
-    res.actions.append(a_t_original[0][1])
-
-    res.actionspace_size = 2
-
-    res.success = True
-
-    return res
-
 def log_data_to_file(filepath, target_q_value, loss):
     print("logging target_q_value and loss to file")
     f = open(str(filepath) + 'q_list.log', 'a+')
@@ -176,8 +127,6 @@ if __name__ == "__main__":
     rospy.init_node('multi_learning', anonymous=True)
     rate = rospy.Rate(20)  # 20Hz
 
-    service_predict = rospy.Service("multi_learning/predict", Predict, ros_predict, buff_size=65536)
-
     sub_transitions = rospy.Subscriber("multi_learning/transitions", Transition, ros_add_to_replaybuffer)
 
     ############################################
@@ -201,16 +150,11 @@ if __name__ == "__main__":
     ############################################
 
     global actor
-    if params.SPLIT_STATE_SPACE:
-        actor = ActorNetwork(sess, params.STATE_SIZE_KIN, params.STATE_SIZE_ENV, params.ACTION_SIZE, params.BATCH_SIZE,
-                             params.TAU, params.LRA)
-        critic = CriticNetwork(sess, params.STATE_SIZE_KIN, params.STATE_SIZE_ENV, params.ACTION_SIZE,
-                               params.BATCH_SIZE, params.TAU, params.LRC)
-    else:
-        actor = ActorNetwork(sess, params.STATE_SIZE, params.ACTION_SIZE, params.BATCH_SIZE,
-                             params.TAU, params.LRA)
-        critic = CriticNetwork(sess, params.STATE_SIZE, params.ACTION_SIZE,
-                               params.BATCH_SIZE, params.TAU, params.LRC)
+
+    actor = ActorNetwork(sess, params.STATE_SIZE, params.ACTION_SIZE, params.BATCH_SIZE,
+                         params.TAU, params.LRA)
+    critic = CriticNetwork(sess, params.STATE_SIZE, params.ACTION_SIZE,
+                           params.BATCH_SIZE, params.TAU, params.LRC)
 
     #make TF graph usable for callback functions
     global graph
@@ -219,18 +163,21 @@ if __name__ == "__main__":
     # Now load the weight
     print("Now we load the weight")
     try:
-        actor.model.load_weights(str(params.backup_path) + "/actormodel.h5")
-        critic.model.load_weights(str(params.backup_path) + "/criticmodel.h5")
-        actor.target_model.load_weights(str(params.backup_path) + "/target_actormodel.h5")
-        critic.target_model.load_weights(str(params.backup_path) + "/target_criticmodel.h5")
+        actor.model.load_weights(str(params.backup_path) + "actormodel.h5")
+        critic.model.load_weights(str(params.backup_path) + "criticmodel.h5")
+        actor.target_model.load_weights(str(params.backup_path) + "target_actormodel.h5")
+        critic.target_model.load_weights(str(params.backup_path) + "target_criticmodel.h5")
         print("Weight load successfully")
     except:
         print("Cannot find the weight")
+        #TODO store initial weights at backup location
 
 
     print("ReplayBuffer size on startup: " + str(Buffer.count()))
 
     iteration = params.last_iteration_cnt
+
+    backup_id = params.next_backup_id
 
     print("Starting with iteration " + str(iteration) + "  " + str(ctime(time())))
 
@@ -250,89 +197,31 @@ if __name__ == "__main__":
                 # Do the batch update
                 #batch = Buffer.getBatch(BATCH_SIZE)
 
-                #split_state_space = True
-                if not params.SPLIT_STATE_SPACE:
+                states = np.asarray([e[0] for e in batch])
+                actions = np.asarray([e[1] for e in batch])
+                rewards = np.asarray([e[2] for e in batch])
+                new_states = np.asarray([e[3] for e in batch])
+                dones = np.asarray([e[4] for e in batch])
+                y_t = np.asarray([e[1] for e in batch])
 
-                    states = np.asarray([e[0] for e in batch])
-                    actions = np.asarray([e[1] for e in batch])
-                    rewards = np.asarray([e[2] for e in batch])
-                    new_states = np.asarray([e[3] for e in batch])
-                    dones = np.asarray([e[4] for e in batch])
-                    y_t = np.asarray([e[1] for e in batch])
+                target_q_values = critic.target_model.predict([new_states, actor.target_model.predict(new_states)])
 
-                    target_q_values = critic.target_model.predict([new_states, actor.target_model.predict(new_states)])
+                #print(target_q_values)
 
-                    #print(target_q_values)
+                for k in range(len(batch)):
+                    if dones[k]:
+                        y_t[k] = rewards[k]
+                    else:
+                        y_t[k] = rewards[k] + params.GAMMA * target_q_values[k]
 
-                    for k in range(len(batch)):
-                        if dones[k]:
-                            y_t[k] = rewards[k]
-                        else:
-                            y_t[k] = rewards[k] + params.GAMMA * target_q_values[k]
-
-                    loss += critic.model.train_on_batch([states, actions], y_t)
-                    a_for_grad = actor.model.predict(states)
-                    #print(a_for_grad)
-                    grads = critic.gradients(states, a_for_grad)
-                    #print(grads)
-                    actor.train(states, grads)
-                    actor.target_train()
-                    critic.target_train()
-
-                else:
-                    #print("Splitting")
-
-                    #split states into env and kin input for split network architecture
-                    states_env = np.asarray([e[0][0:48] for e in batch])
-                    states_kin = np.asarray([e[0][48:54] for e in batch])
-
-                    new_states_env = np.asarray([e[3][0:48] for e in batch])
-                    new_states_kin = np.asarray([e[3][48:54] for e in batch])
-
-                    states = [states_kin, states_env]
-                    new_states = [new_states_kin, new_states_env]
-
-                    # print("###################States ENV#######################")
-                    # print(states_env)
-                    # print(states_env.shape)
-                    # print("###################States KIN#######################")
-                    # print(states_kin)
-                    # print(states_kin.shape)
-                    # print("####################################################")
-                    #
-                    # print("##################NEW States ENV####################")
-                    # print(new_states_env)
-                    # print(new_states_env.shape)
-                    # print("##################NEW States KIN####################")
-                    # print(new_states_kin)
-                    # print(new_states_kin.shape)
-                    # print("####################################################")
-
-                    actions = np.asarray([e[1] for e in batch])
-                    rewards = np.asarray([e[2] for e in batch])
-                    dones = np.asarray([e[4] for e in batch])
-                    y_t = np.asarray([e[1] for e in batch])
-
-                    target_q_values = critic.target_model.predict([new_states_kin, new_states_env, actor.target_model.predict(new_states)])
-
-                    #print("Target Q Values: " + str(target_q_values))
-
-                    for k in range(len(batch)):
-                        if dones[k]:
-                            y_t[k] = rewards[k]
-                        else:
-                            y_t[k] = rewards[k] + params.GAMMA * target_q_values[k]
-
-                    loss += critic.model.train_on_batch([states_kin, states_env, actions], y_t)
-                    a_for_grad = actor.model.predict(states)
-                    # # print(a_for_grad)
-                    grads = critic.gradients(states_kin, states_env, a_for_grad)
-                    # # print(grads)
-                    actor.train(states_kin, states_env, grads)
-                    actor.target_train()
-                    critic.target_train()
-
-
+                loss += critic.model.train_on_batch([states, actions], y_t)
+                a_for_grad = actor.model.predict(states)
+                #print(a_for_grad)
+                grads = critic.gradients(states, a_for_grad)
+                #print(grads)
+                actor.train(states, grads)
+                actor.target_train()
+                critic.target_train()
 
                 # log data and save model every backup_interval iteration
                 if np.mod(iteration, params.backup_interval) == 0:
@@ -380,9 +269,9 @@ if __name__ == "__main__":
                         print("Now we save model for evaluation")
 
                         #create folder for evaluation backup
-                        os.mkdir(str(params.backup_path) + str(iteration))
+                        os.mkdir(str(params.backup_path) + str(backup_id))
 
-                        backup_path_eval = str(params.backup_path) + str(iteration)
+                        backup_path_eval = str(params.backup_path) + str(backup_id)
 
                         actor.model.save_weights(str(backup_path_eval) + "/actormodel.h5", overwrite=True)
                         with open(str(backup_path_eval) + "/actormodel.json", "w") as outfile:
@@ -400,23 +289,25 @@ if __name__ == "__main__":
                         with open(str(backup_path_eval) + "/target_criticmodel.json", "w") as outfile:
                             json.dump(critic.target_model.to_json(), outfile)
 
+                        backup_id = backup_id + 1
+
                     else:
                         print("Now we save model tmp")
 
-                        actor.model.save_weights(str(params.backup_path) + "/actormodel.h5", overwrite=True)
-                        with open(str(params.backup_path) + "/actormodel.json", "w") as outfile:
+                        actor.model.save_weights(str(params.backup_path) + "actormodel.h5", overwrite=True)
+                        with open(str(params.backup_path) + "actormodel.json", "w") as outfile:
                             json.dump(actor.model.to_json(), outfile)
 
-                        actor.target_model.save_weights(str(params.backup_path) + "/target_actormodel.h5", overwrite=True)
-                        with open(str(params.backup_path) + "/target_actormodel.json", "w") as outfile:
+                        actor.target_model.save_weights(str(params.backup_path) + "target_actormodel.h5", overwrite=True)
+                        with open(str(params.backup_path) + "target_actormodel.json", "w") as outfile:
                             json.dump(actor.target_model.to_json(), outfile)
 
-                        critic.model.save_weights(str(params.backup_path) + "/criticmodel.h5", overwrite=True)
-                        with open(str(params.backup_path) + "/criticmodel.json", "w") as outfile:
+                        critic.model.save_weights(str(params.backup_path) + "criticmodel.h5", overwrite=True)
+                        with open(str(params.backup_path) + "criticmodel.json", "w") as outfile:
                             json.dump(critic.model.to_json(), outfile)
 
-                        critic.target_model.save_weights(str(params.backup_path) + "/target_criticmodel.h5", overwrite=True)
-                        with open(str(params.backup_path) + "/target_criticmodel.json", "w") as outfile:
+                        critic.target_model.save_weights(str(params.backup_path) + "target_criticmodel.h5", overwrite=True)
+                        with open(str(params.backup_path) + "target_criticmodel.json", "w") as outfile:
                             json.dump(critic.target_model.to_json(), outfile)
 
                 iteration = iteration + 1

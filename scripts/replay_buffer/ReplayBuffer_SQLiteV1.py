@@ -6,7 +6,7 @@ from StringIO import StringIO
 
 #THIS SCRIPT HANDLES A ReplayBuffer DB for StateSpaceV3
 
-class ReplayBufferSQLiteSSv1(object):
+class ReplayBufferSQLite(object):
 
     def __init__(self, filepath_to_db, STATE_SIZE, ACTION_SIZE):
 
@@ -79,7 +79,7 @@ class ReplayBufferSQLiteSSv1(object):
             element_list.append(element)
 
         #update statistics
-        self.update_statistics(list_ids)
+        #self.update_statistics(list_ids)
 
         return element_list
 
@@ -132,7 +132,7 @@ class ReplayBufferSQLiteSSv1(object):
             element_cnt = element_cnt + 1
 
         # update statistics
-        self.update_statistics(list_ids)
+        #self.update_statistics(list_ids)
 
         return Batch_List
 
@@ -323,21 +323,21 @@ class ReplayBufferSQLiteSSv1(object):
         ###########################
 
         # create sql_command string for adding new id to statistics table
-        sql_command_create_statistics_id = 'INSERT INTO Statistics (id, Count) VALUES ('
+        #sql_command_create_statistics_id = 'INSERT INTO Statistics (id, Count) VALUES ('
 
         #ID field
-        sql_command_create_statistics_id = sql_command_create_statistics_id + str(self.id) + ', '
+        #sql_command_create_statistics_id = sql_command_create_statistics_id + str(self.id) + ', '
 
         #Count field
-        sql_command_create_statistics_id = sql_command_create_statistics_id + str(0) + ');'
+        #sql_command_create_statistics_id = sql_command_create_statistics_id + str(0) + ');'
 
         ###########################
         #    execute command      #
         ###########################
 
-        print(sql_command_create_statistics_id)
+        #print(sql_command_create_statistics_id)
         # execute sql command
-        self.cursor.execute(sql_command_create_statistics_id)
+        #self.cursor.execute(sql_command_create_statistics_id)
 
         # ONLY COMMIT EVERY 500 Iteration with self.save_db for performance boost
         # never forget this, if you want the changes to be saved:
